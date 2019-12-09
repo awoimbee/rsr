@@ -2,11 +2,10 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
-
 #[derive(Debug)]
 pub struct FileTransformer {
     contents: String,
-    read_ofst: usize
+    read_ofst: usize,
 }
 
 /* General methods */
@@ -43,6 +42,9 @@ impl FileTransformer {
             &self.contents[after..]
         );
         self.read_ofst = before + replacement.len();
+    }
+    pub fn reset_reader(&mut self) {
+        self.read_ofst = 0;
     }
     pub fn reader(&self) -> &str {
         let clen = self.contents.len();
