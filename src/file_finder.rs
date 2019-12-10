@@ -1,15 +1,15 @@
 use regex::Regex;
 use std::fs;
 
-// If performance becomes an issue: create FileFinder object & construct index
-
+/// TODO: use gitignore
 pub fn allowed_dir(dname: &str) -> bool {
     !dname.ends_with("/.git") && !dname.ends_with("/vendor") && !dname.ends_with("/var/cache")
 }
 
 /// finds files inside `root` w/ names that matches
-/// And call `callback` on them.
-pub fn f_find(root: &str, regex_match: &'static str) -> Vec<String> {
+/// Performance:
+///   Good enough. It's not really slow and it permits the use of .into_par_iter()
+pub fn f_find(root: &str, regex_match: &str) -> Vec<String> {
     let reg = Regex::new(regex_match).unwrap();
     let mut dir_stack: Vec<String> = Vec::new();
     let mut file_stack: Vec<String> = Vec::new();
