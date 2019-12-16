@@ -1,112 +1,72 @@
-#[macro_use]
 extern crate clap;
+extern crate reqwest;
 
-mod file_finder;
-mod file_transformer;
+use clap::{Arg, App};
+use serde_json::Value;
 
-use file_finder::f_find;
-use file_transformer::FileTransformer;
-use rayon::prelude::*;
-use regex::Regex;
 use std::error::Error;
+use std::collections::HashMap;
 
-enum ReplacePart<'a> {
-    S(&'a str),
-    M(usize),
-}
-struct SearchReplace<'a> {
-    search: Regex,
-    replace: Vec<ReplacePart<'a>>,
-}
-
-fn parse_escaped<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
-    let (sear, repl) = sr;
-    let search = Regex::new(&regex::escape(sear)).unwrap();
-    let replace = vec![ReplacePart::S(repl)];
-    SearchReplace { search, replace }
-}
-fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
-    let (sear, repl) = sr;
-    let reg_match = Regex::new(r"\$\(([0-9]*)\)").unwrap();
-    let search = Regex::new(sear).unwrap();
-    let mut replace = Vec::new();
-    let mut reader_ofst = 0;
-    for m in reg_match.captures_iter(repl) {
-        let full = m.get(0).unwrap();
-        let nb = m.get(1).unwrap();
-        if full.start() == 0 || repl.as_bytes()[full.start() - 1] != b'$' {
-            replace.push(ReplacePart::S(&repl[reader_ofst..full.start()]));
-            replace.push(ReplacePart::M(nb.as_str().parse().unwrap()));
-        } else {
-            replace.push(ReplacePart::S(&repl[reader_ofst..full.start() - 1]));
-            replace.push(ReplacePart::S(&repl[full.start()..full.end()]));
-        }
-        reader_ofst = full.end();
-    }
-    replace.push(ReplacePart::S(&repl[reader_ofst..repl.len()]));
-    SearchReplace { search, replace }
-}
+mod models;
+use models::api::Api;
+use models::program::Program;
+use models::runner::Runner;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = clap_app!(rsr =>
-        (version: "0.5")
-        (author: "Arthur W. <arthur.woimbee@gmail.com>")
-        (about: "rsr, a tool to search & replace FAST.")
-        (@arg WHERE: +takes_value +required "Where to search & replace")
-        (@arg ESCAPE: -e --escape "Escape search string")
-        (@arg SEARCH: -s --search ... +takes_value +required "What to search (regex syntax unless --escape)")
-        (@arg REPLACE: -r --replace ... +takes_value +required "Replace by what ? (capture groups: $(N), \\n: $'\\n')")
-        (@arg GLOB: -g --glob +takes_value "Kinda a glob pattern (regex syntax)")
-    )
+    let matches = App::new("RustClient")
+        .version("1.0")
+        .about("Rust Client for Uniflow")
+        .arg(Arg::with_name("api_key")
+            .long("api-key")
+            .required(true)
+            .takes_value(true))
+            .help("You must provide an api key : use --api_key=[Your Api Key]")
+        .arg(Arg::with_name("identifier")
+            .required(true)
+            .takes_value(true))
+            .help("You must provide an identifier")
+        .arg(Arg::with_name("env")
+            .long("env")
+            .takes_value(true))
     .get_matches();
 
-    if args.occurrences_of("SEARCH") != args.occurrences_of("REPLACE") {
-        panic!("You must input 1 replacement string per search string !");
+    let mut env: String = String::from("prod");
+    if matches.is_present("env") {
+        env = matches.values_of("env").unwrap().collect();
     }
 
-    let escape = args.is_present("ESCAPE");
-    let search = args.values_of("SEARCH").unwrap();
-    let replace = args.values_of("REPLACE").unwrap();
-    let where_ = args.value_of("WHERE").unwrap();
-    let glob = args
-        .value_of("GLOB")
-        .unwrap_or(".*(?:(?:[^p]|p[^n]|pn[^g])|(?:[^g]|g[^i]|gi[^f]))");
+    let api_key: String = matches.values_of("api_key").unwrap().collect();
+    let api = Api::new(env, api_key);
+    let identifier: String = matches.values_of("identifier").unwrap().collect();
+    //let command_args: String = String::from("");
 
-    let parser = if escape { parse_escaped } else { parse };
-    let search_replace: Vec<_> = search.zip(replace).map(parser).collect();
-
-    let files = f_find(where_, glob);
-
-    files
-        .into_par_iter()
-        .for_each(|f| sr_file(&f, &search_replace));
-    Ok(())
-}
-
-fn sr_file(fname: &str, search_replace: &Vec<SearchReplace>) {
-    let mut ft = match FileTransformer::new(&fname) {
-        Some(ft) => ft,
-        None => return,
-    };
-
-    let mut modified = false;
-    for sr in search_replace.iter() {
-        ft.reset_reader();
-        while let Some(cap) = sr.search.captures(ft.reader()) {
-            let s = cap.get(0).unwrap().start();
-            let a = cap.get(0).unwrap().end();
-            let mut new_text = String::new();
-            for part in &sr.replace {
-                match part {
-                    ReplacePart::S(s) => new_text.push_str(s),
-                    ReplacePart::M(m) => new_text.push_str(&cap[*m]),
-                }
-            }
-            ft.reader_replace(s, a, &new_text);
-            modified = true;
+    let mut program: Program = Program::new(0, String::from(""));
+    let program_list_params: HashMap<&str, String> = [].iter().cloned().collect();
+    let program_list_url: String = api.clone().endpoint("program", program_list_params).to_string();
+    let program_list_data: Vec<Value> = reqwest::get(&program_list_url)?.json()?;
+    for program_data in program_list_data.iter() {
+        if program_data["slug"] == identifier {
+            let params: HashMap<&str, String> = [
+                ("id", program_data["id"].to_string())
+            ].iter().cloned().collect();
+            let url: String = api.clone().endpoint("program_data", params).to_string();
+            let data: String = reqwest::get(&url)?.text()?;
+            let data_json: Value = serde_json::from_str(&data.to_string())?;
+            program = Program::new(
+                program_data["id"].as_i64().unwrap(),
+                data_json["data"].to_string()
+            );
         }
     }
-    if modified {
-        ft.write_file(&fname);
+    if program.clone().get_id() == 0 {
+        panic!("Not such process [{}]", identifier);
     }
+
+    let rail_string_data = program.get_data().to_string();
+    let rail_string: String = serde_json::from_str(&rail_string_data)?;
+    let rail: Vec<Value> = serde_json::from_str(&rail_string)?;
+    let runner = Runner::new(/*command_args*/);
+    runner.run(rail);
+
+    Ok(())
 }
