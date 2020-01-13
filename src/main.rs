@@ -11,8 +11,8 @@ use regex::Regex;
 use std::error::Error;
 
 enum ReplacePart<'a> {
-    S(&'a str),
-    M(usize),
+    Str(&'a str),
+    Match(usize),
 }
 struct SearchReplace<'a> {
     search: Regex,
@@ -22,28 +22,31 @@ struct SearchReplace<'a> {
 fn parse_escaped<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
     let (sear, repl) = sr;
     let search = Regex::new(&regex::escape(sear)).unwrap();
-    let replace = vec![ReplacePart::S(repl)];
+    let replace = vec![ReplacePart::Str(repl)];
     SearchReplace { search, replace }
 }
 fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
-    let (sear, repl) = sr;
     let reg_match = Regex::new(r"\$\(([0-9]*)\)").unwrap();
-    let search = Regex::new(sear).unwrap();
+    let (raw_search, raw_replace) = sr;
+    let search = Regex::new(raw_search).unwrap();
     let mut replace = Vec::new();
-    let mut reader_ofst = 0;
-    for m in reg_match.captures_iter(repl) {
+    let mut read_ofset = 0;
+    for m in reg_match.captures_iter(raw_replace) {
         let full = m.get(0).unwrap();
         let nb = m.get(1).unwrap();
-        if full.start() == 0 || repl.as_bytes()[full.start() - 1] != b'$' {
-            replace.push(ReplacePart::S(&repl[reader_ofst..full.start()]));
-            replace.push(ReplacePart::M(nb.as_str().parse().unwrap()));
+        // if is not escaped
+        if full.start() == 0 || raw_replace.as_bytes()[full.start() - 1] != b'$' {
+            replace.push(ReplacePart::Str(&raw_replace[read_ofset..full.start()]));
+            replace.push(ReplacePart::Match(nb.as_str().parse().unwrap()));
         } else {
-            replace.push(ReplacePart::S(&repl[reader_ofst..full.start() - 1]));
-            replace.push(ReplacePart::S(&repl[full.start()..full.end()]));
+            replace.push(ReplacePart::Str(&raw_replace[read_ofset..full.start() - 1]));
+            replace.push(ReplacePart::Str(&raw_replace[full.start()..full.end()]));
         }
-        reader_ofst = full.end();
+        read_ofset = full.end();
     }
-    replace.push(ReplacePart::S(&repl[reader_ofst..repl.len()]));
+    replace.push(ReplacePart::Str(
+        &raw_replace[read_ofset..raw_replace.len()],
+    ));
     SearchReplace { search, replace }
 }
 
@@ -60,53 +63,53 @@ fn main() -> Result<(), Box<dyn Error>> {
     )
     .get_matches();
 
+    // Read input args
     if args.occurrences_of("SEARCH") != args.occurrences_of("REPLACE") {
         panic!("You must input 1 replacement string per search string !");
     }
-
     let escape = args.is_present("ESCAPE");
     let search = args.values_of("SEARCH").unwrap();
     let replace = args.values_of("REPLACE").unwrap();
     let where_ = args.value_of("WHERE").unwrap();
-    let glob = args
-        .value_of("GLOB")
-        .unwrap_or(".*(?:(?:[^p]|p[^n]|pn[^g])|(?:[^g]|g[^i]|gi[^f]))");
+    let glob = args.value_of("GLOB").unwrap_or(".*");
 
+    // Parse search & replace strings
     let parser = if escape { parse_escaped } else { parse };
     let search_replace: Vec<_> = search.zip(replace).map(parser).collect();
 
+    // Raw sauce
     let files = f_find(where_, glob);
-
     files
         .into_par_iter()
         .for_each(|f| sr_file(&f, &search_replace));
     Ok(())
 }
 
+/// Search & Replace in one file
 fn sr_file(fname: &str, search_replace: &Vec<SearchReplace>) {
     let mut ft = match FileTransformer::new(&fname) {
         Some(ft) => ft,
         None => return,
     };
 
-    let mut modified = false;
+    let mut is_modified = false;
     for sr in search_replace.iter() {
         ft.reset_reader();
         while let Some(cap) = sr.search.captures(ft.reader()) {
-            let s = cap.get(0).unwrap().start();
-            let a = cap.get(0).unwrap().end();
+            let start = cap.get(0).unwrap().start();
+            let end = cap.get(0).unwrap().end();
             let mut new_text = String::new();
             for part in &sr.replace {
                 match part {
-                    ReplacePart::S(s) => new_text.push_str(s),
-                    ReplacePart::M(m) => new_text.push_str(&cap[*m]),
+                    ReplacePart::Str(stri) => new_text.push_str(stri),
+                    ReplacePart::Match(m_id) => new_text.push_str(&cap[*m_id]),
                 }
             }
-            ft.reader_replace(s, a, &new_text);
-            modified = true;
+            ft.reader_replace(start, end, &new_text);
+            is_modified = true;
         }
     }
-    if modified {
+    if is_modified {
         ft.write_file(&fname);
     }
 }
