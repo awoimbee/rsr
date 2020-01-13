@@ -22,7 +22,9 @@ impl FileTransformer {
         match f.read_to_string(&mut contents) {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("Could not read {} ({})", file_name, e);
+                if e.kind() != std::io::ErrorKind::InvalidData {
+                    eprintln!("Could not read {} ({})", file_name, e);
+                }
                 return None;
             }
         };
@@ -32,25 +34,35 @@ impl FileTransformer {
             read_ofst: 0,
         })
     }
-    pub fn reader_replace(&mut self, re_start: usize, re_end: usize, replacement: &str) {
+    pub fn reader_replace(&mut self, re_start: usize, re_end: usize, replacement: String) {
         let before = re_start + self.read_ofst;
         let after = re_end + self.read_ofst;
-        self.contents = format!(
-            "{}{}{}",
-            &self.contents[..before],
-            replacement,
-            &self.contents[after..]
-        );
+        if after - before == replacement.len() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    replacement.as_bytes().as_ptr(),
+                    &mut self.contents.as_bytes_mut()[before - 1],
+                    replacement.len(),
+                );
+            }
+        } else {
+            self.contents = format!(
+                "{}{}{}",
+                &self.contents[..before],
+                replacement,
+                &self.contents[after..]
+            );
+        }
         self.read_ofst = before + replacement.len();
     }
     pub fn reset_reader(&mut self) {
         self.read_ofst = 0;
     }
     pub fn reader(&self) -> &str {
-        let clen = self.contents.len();
-        match self.read_ofst < clen {
+        let c_len = self.contents.len();
+        match self.read_ofst < c_len {
             true => &self.contents[self.read_ofst..],
-            _ if clen != 0 => &self.contents[clen - 1..],
+            _ if c_len != 0 => &self.contents[c_len - 1..],
             _ => &self.contents,
         }
     }

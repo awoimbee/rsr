@@ -52,7 +52,7 @@ fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = clap_app!(rsr =>
-        (version: "0.5")
+        (version: "0.5.1")
         (author: "Arthur W. <arthur.woimbee@gmail.com>")
         (about: "rsr, a tool to search & replace FAST.")
         (@arg WHERE: +takes_value +required "Where to search & replace")
@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 /// Search & Replace in one file
-fn sr_file(fname: &str, search_replace: &Vec<SearchReplace>) {
+fn sr_file(fname: &str, search_replace: &[SearchReplace]) {
     let mut ft = match FileTransformer::new(&fname) {
         Some(ft) => ft,
         None => return,
@@ -105,7 +105,7 @@ fn sr_file(fname: &str, search_replace: &Vec<SearchReplace>) {
                     ReplacePart::Match(m_id) => new_text.push_str(&cap[*m_id]),
                 }
             }
-            ft.reader_replace(start, end, &new_text);
+            ft.reader_replace(start, end, new_text);
             is_modified = true;
         }
     }
