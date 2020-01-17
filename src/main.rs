@@ -10,9 +10,22 @@ use rayon::prelude::*;
 use regex::Regex;
 use std::error::Error;
 
+fn to_upper(s: &str) -> String {
+    s.to_ascii_uppercase()
+}
+
+fn to_lower(s: &str) -> String {
+    s.to_ascii_lowercase()
+}
+
+struct Match {
+    id: usize,
+    transform: Option<&'static (dyn (Fn(&str) -> String) + Sync)>,
+}
+
 enum ReplacePart<'a> {
     Str(&'a str),
-    Match(usize),
+    Match(Match),
 }
 struct SearchReplace<'a> {
     search: Regex,
@@ -26,7 +39,7 @@ fn parse_escaped<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
     SearchReplace { search, replace }
 }
 fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
-    let reg_match = Regex::new(r"\$\(([0-9]*)\)").unwrap();
+    let reg_match = Regex::new(r"\$\(([0-9]*)([A-Z])?\)").unwrap();
     let (raw_search, raw_replace) = sr;
     let search = Regex::new(raw_search).unwrap();
     let mut replace = Vec::new();
@@ -36,11 +49,17 @@ fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
         let nb = m.get(1).unwrap();
         // if is not escaped
         if full.start() == 0 || raw_replace.as_bytes()[full.start() - 1] != b'$' {
+            let id = nb.as_str().parse().unwrap();
+            let transform: Option<&'static (dyn (Fn(&str) -> String) + Sync)> = match m.get(2) {
+                Some(c) if c.as_str() == "U" => Some(&to_upper),
+                Some(c) if c.as_str() == "L" => Some(&to_lower),
+                None => None,
+                Some(c) => panic!("Unrecognised modifier: {}", c.as_str()),
+            };
             replace.push(ReplacePart::Str(&raw_replace[read_ofset..full.start()]));
-            replace.push(ReplacePart::Match(nb.as_str().parse().unwrap()));
+            replace.push(ReplacePart::Match(Match { id, transform }));
         } else {
-            replace.push(ReplacePart::Str(&raw_replace[read_ofset..full.start() - 1]));
-            replace.push(ReplacePart::Str(&raw_replace[full.start()..full.end()]));
+            replace.push(ReplacePart::Str(&raw_replace[read_ofset..full.end()]));
         }
         read_ofset = full.end();
     }
@@ -102,7 +121,12 @@ fn sr_file(fname: &str, search_replace: &[SearchReplace]) {
             for part in &sr.replace {
                 match part {
                     ReplacePart::Str(stri) => new_text.push_str(stri),
-                    ReplacePart::Match(m_id) => new_text.push_str(&cap[*m_id]),
+                    ReplacePart::Match(m) => {
+                        match m.transform {
+                            Some(t) => new_text.push_str(&t(&cap[m.id])),
+                            None => new_text.push_str(&cap[m.id]),
+                        }
+                    }
                 }
             }
             ft.reader_replace(start, end, new_text);

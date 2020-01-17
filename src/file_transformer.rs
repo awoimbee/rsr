@@ -41,7 +41,7 @@ impl FileTransformer {
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     replacement.as_bytes().as_ptr(),
-                    &mut self.contents.as_bytes_mut()[before - 1],
+                    &mut self.contents.as_bytes_mut()[before],
                     replacement.len(),
                 );
             }
