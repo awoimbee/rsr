@@ -74,14 +74,14 @@ impl FileTransformer {
         let mut file_w = match open_options {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("Could not open file ({})", e);
+                eprintln!("Could not open {} for writing ({})", file_name, e);
                 return false;
             }
         };
         match file_w.write(self.contents.as_bytes()) {
             Ok(_size) => true,
             Err(e) => {
-                eprintln!("Could write to file ({})", e);
+                eprintln!("Could write to {} ({})", file_name, e);
                 false
             }
         }
