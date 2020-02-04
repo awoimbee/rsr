@@ -1,4 +1,6 @@
-pub type DynFnPtr = &'static (dyn (Fn(&str) -> String) + Sync);
+use std::borrow::Cow;
+
+pub type DynFnPtr = &'static (dyn (Fn(&str) -> Cow<str>) + Sync);
 
 struct Modifier {
     s: &'static str,
@@ -16,12 +18,12 @@ const MODIFIERS: [Modifier; 2] = [
     },
 ];
 
-fn to_upper(s: &str) -> String {
-    s.to_ascii_uppercase()
+fn to_upper(s: &str) -> Cow<str> {
+    Cow::from(s.to_ascii_uppercase())
 }
 
-fn to_lower(s: &str) -> String {
-    s.to_ascii_lowercase()
+fn to_lower(s: &str) -> Cow<str> {
+    Cow::from(s.to_ascii_lowercase())
 }
 
 pub fn get_modifier(requested: &str) -> Option<DynFnPtr> {

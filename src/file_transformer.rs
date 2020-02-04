@@ -1,21 +1,28 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::path::Path;
+use std::path::PathBuf;
+use std::pin::Pin;
 
 #[derive(Debug)]
-pub struct FileTransformer {
-    contents: String,
-    read_ofst: usize,
+pub struct FileTransformer<'a> {
+    // path: PathBuf,
+    /// Is referenced by self.new_contents
+    contents: Pin<String>,
+    /// References self.contents
+    new_contents: Vec<Cow<'a, str>>,
+    modified: bool,
 }
 
-/* General methods */
-impl FileTransformer {
-    pub fn new(file_name: &str) -> Option<Self> {
+impl<'a> FileTransformer<'a> {
+    pub fn new(file_name: &Path) -> Option<Self> {
         let mut contents = String::new();
         let mut f = match File::open(file_name) {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("Could not open {} ({})", file_name, e);
+                eprintln!("Could not open {} ({})", file_name.to_string_lossy(), e);
                 return None;
             }
         };
@@ -23,65 +30,66 @@ impl FileTransformer {
             Ok(_) => (),
             Err(e) => {
                 if e.kind() != std::io::ErrorKind::InvalidData {
-                    eprintln!("Could not read {} ({})", file_name, e);
+                    eprintln!("Could not read {} ({})", file_name.to_string_lossy(), e);
                 }
                 return None;
             }
         };
+        let contents = Pin::new(contents);
+        // Here, transmute hides to the compileer the fact that new_contents -> contents
+        let new_contents = vec![Cow::from(unsafe {
+            std::mem::transmute::<&str, &str>(&contents)
+        })];
 
         Some(FileTransformer {
             contents,
-            read_ofst: 0,
+            new_contents,
+            modified: false,
         })
     }
     pub fn reader_replace(&mut self, re_start: usize, re_end: usize, replacement: String) {
-        let before = re_start + self.read_ofst;
-        let after = re_end + self.read_ofst;
-        if after - before == replacement.len() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    replacement.as_bytes().as_ptr(),
-                    &mut self.contents.as_bytes_mut()[before],
-                    replacement.len(),
-                );
-            }
-        } else {
-            self.contents = format!(
-                "{}{}{}",
-                &self.contents[..before],
-                replacement,
-                &self.contents[after..]
-            );
+        let before = re_start;
+        let after = re_end;
+        // txt has the same lifetime as FileTransformer. You know it, I know it, Ructc should know it.
+        let txt: &'a str = unsafe { std::mem::transmute(&self.new_contents.pop().unwrap()[..]) };
+
+        if before != 0 {
+            self.new_contents.push(Cow::from(&txt[..before]));
         }
-        self.read_ofst = before + replacement.len();
+        self.new_contents.push(Cow::from(replacement));
+        self.new_contents.push(Cow::from(&txt[after..]));
+        self.modified = true;
     }
     pub fn reset_reader(&mut self) {
-        self.read_ofst = 0;
+        // recreating a Pin here is ok since new_contents is drained
+        self.contents = Pin::new(self.new_contents.drain(..).map(|s| s).collect());
+        let txt: &'a str = unsafe { std::mem::transmute(&self.contents[..]) };
+        self.new_contents.push(Cow::from(txt));
     }
     pub fn reader(&self) -> &str {
-        let c_len = self.contents.len();
-        match self.read_ofst < c_len {
-            true => &self.contents[self.read_ofst..],
-            _ if c_len != 0 => &self.contents[c_len - 1..],
-            _ => &self.contents,
-        }
+        &self.new_contents[self.new_contents.len() - 1]
     }
-    pub fn write_file(&self, file_name: &str) -> bool {
-        let open_options = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(file_name);
+
+    /// FileTransformer shall not be reused after a call to this
+    /// TODO: poison FileTransformer
+    pub fn write_file(&mut self, file: &Path) -> bool {
+        let open_options = OpenOptions::new().write(true).truncate(true).open(file);
         let mut file_w = match open_options {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("Could not open {} for writing ({})", file_name, e);
+                eprintln!(
+                    "Could not open {} for writing ({})",
+                    file.to_string_lossy(),
+                    e
+                );
                 return false;
             }
         };
-        match file_w.write(self.contents.as_bytes()) {
+
+        match file_w.write(self.new_contents.drain(..).collect::<String>().as_bytes()) {
             Ok(_size) => true,
             Err(e) => {
-                eprintln!("Could write to {} ({})", file_name, e);
+                eprintln!("Could write to {} ({})", file.to_string_lossy(), e);
                 false
             }
         }
