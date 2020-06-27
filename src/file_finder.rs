@@ -40,7 +40,7 @@ impl FileWalker {
 
     /// TODO: use gitignore
     fn allowed_dir(dname: &Path) -> bool {
-        !dname.ends_with("/.git") && !dname.ends_with("/vendor") && !dname.ends_with("/var/cache")
+        !dname.ends_with(".git") && !dname.ends_with("vendor") && !dname.ends_with("var/cache")
     }
 }
 
@@ -51,7 +51,7 @@ impl Iterator for FileWalker {
         while self.file_stack.is_empty() {
             let dir = self.dir_stack.pop()?;
             let dir_reader = match fs::read_dir(&dir) {
-                Ok(dr) => dr.into_iter(),
+                Ok(dr) => dr,
                 Err(e) => {
                     eprintln!("Couldn't read {}: {}", dir.to_string_lossy(), e);
                     continue;
