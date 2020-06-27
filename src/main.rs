@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate clap;
-
 mod file_finder;
 mod file_transformer;
 mod modifiers;
@@ -8,8 +5,10 @@ mod modifiers;
 use file_finder::FileWalker;
 use file_transformer::FileTransformer;
 use modifiers::{get_modifier, DynFnPtr};
-use rayon::prelude::*;
+
+use clap::clap_app;
 use rayon::iter::ParallelBridge;
+use rayon::prelude::*;
 use regex::Regex;
 use std::borrow::Cow;
 use std::error::Error;
