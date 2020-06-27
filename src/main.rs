@@ -5,7 +5,6 @@ mod file_finder;
 mod file_transformer;
 mod modifiers;
 
-use file_finder::f_find;
 use file_finder::FileWalker;
 use file_transformer::FileTransformer;
 use modifiers::{get_modifier, DynFnPtr};
@@ -95,14 +94,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let search_replace: Vec<_> = search.zip(replace).map(parser).collect();
 
     // Raw sauce
-    // let ff = FileWalker::new(where_, glob);
-    // let files: Vec<_> = ff.collect();
-    f_find(where_, glob)
-        .into_par_iter()
-        .for_each(|f| sr_file(&f, &search_replace));
+    let ff = FileWalker::new(where_, glob);
+    ff.par_bridge().for_each(|f| sr_file(&f, &search_replace));
 
-    // let ff = FileWalker::new(where_, glob);
-    // ff.par_bridge().for_each(|f| sr_file(&f, &search_replace));
     Ok(())
 }
 

@@ -1,4 +1,5 @@
-use regex::Regex;
+use os_str_bytes::OsStrBytes;
+use regex::bytes::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -9,13 +10,13 @@ use std::path::{Path, PathBuf};
 pub struct FileWalker {
     file_stack: Vec<std::path::PathBuf>,
     dir_stack: Vec<std::path::PathBuf>,
-    reg: regex::Regex,
+    reg: Regex,
 }
 
 impl FileWalker {
     pub fn new(root: &str, regex: &str) -> Self {
-        let mut file_stack = Vec::with_capacity(500);
-        let mut dir_stack = Vec::with_capacity(500);
+        let mut file_stack = Vec::with_capacity(50);
+        let mut dir_stack = Vec::with_capacity(50);
         let reg = match Regex::new(regex) {
             Ok(r) => r,
             Err(e) => panic!("Invalid regex: {}: {}", regex, e),
@@ -47,83 +48,30 @@ impl Iterator for FileWalker {
     type Item = PathBuf;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // while self.file_stack.is_empty() {
-        while !self.dir_stack.is_empty() {
-            if self.dir_stack.is_empty() {
-                return None;
-            };
-            let dir = self.dir_stack.pop().unwrap();
+        while self.file_stack.is_empty() {
+            let dir = self.dir_stack.pop()?;
             let dir_reader = match fs::read_dir(&dir) {
                 Ok(dr) => dr.into_iter(),
                 Err(e) => {
-                    println!("Couldn't read {}: {}", dir.to_string_lossy(), e);
+                    eprintln!("Couldn't read {}: {}", dir.to_string_lossy(), e);
                     continue;
                 }
             };
             for f in dir_reader {
-                let f = f.unwrap(); // I dont know/understand why unwrap is necessary here
+                // use unwrap because it's not safe to continue if the folder
+                // structure changes while this is running anyways
+                let f = f.unwrap();
+                let f_type = f.metadata().unwrap().file_type();
                 let f_path = f.path();
-                let f_meta = f.metadata().unwrap();
-                if f_meta.is_file() {
+                if f_type.is_file() && self.reg.is_match(&f_path.as_os_str().to_bytes()) {
                     self.file_stack.push(f_path);
-                }
-                // todo: rm to_string_lossy
-                else if f_meta.is_dir() && Self::allowed_dir(&f_path) {
+                } else if f_type.is_dir() && Self::allowed_dir(&f_path) {
                     self.dir_stack.push(f_path);
+                } else {
+                    // is a symlink, do nothing
                 }
             }
         }
         self.file_stack.pop()
     }
-}
-
-/// TODO: use gitignore
-pub fn allowed_dir(dname: &Path) -> bool {
-    !dname.ends_with("/.git") && !dname.ends_with("/vendor") && !dname.ends_with("/var/cache")
-}
-
-/// finds files inside `root` w/ names that matches
-/// Performance:
-///   Good enough. It's not really slow and it permits the use of .into_par_iter()
-pub fn f_find(root: &str, regex: &str) -> Vec<PathBuf> {
-    let mut file_stack = Vec::new();
-    let mut dir_stack = Vec::new();
-    let reg = match Regex::new(regex) {
-        Ok(r) => r,
-        Err(e) => panic!("Invalid regex: {}: {}", regex, e),
-    };
-    let r_path = PathBuf::from(root);
-    let root_meta = match fs::metadata(&r_path) {
-        Ok(m) => m,
-        Err(e) => panic!("Invalid root dir: {} ({})", root, e),
-    };
-    if root_meta.is_dir() {
-        dir_stack.push(r_path)
-    } else {
-        file_stack.push(r_path)
-    };
-
-    while let Some(dir) = dir_stack.pop() {
-        let dir_reader = match fs::read_dir(&dir) {
-            Ok(dr) => dr,
-            Err(e) => {
-                println!("Couldn't read {}: {}", dir.to_string_lossy(), e);
-                continue;
-            }
-        };
-        for f in dir_reader {
-            let f = f.unwrap(); // I dont know/understand why unwrap is necessary here
-            let f_path = f.path();
-            let f_meta = f.metadata().unwrap();
-            if f_meta.is_file() {
-                file_stack.push(f_path);
-            }
-            // todo: rm to_string_lossy
-            else if f_meta.is_dir() && allowed_dir(&f_path) {
-                dir_stack.push(f_path);
-            }
-        }
-    }
-
-    file_stack
 }
