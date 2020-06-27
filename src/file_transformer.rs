@@ -38,7 +38,7 @@ impl<'a> FileTransformer<'a> {
 
         Some(FileTransformer {
             txt: contents,
-            new_txt: Vec::new(),
+            new_txt: Vec::with_capacity(100),
             unread_txt: &contents_ref,
             modified: false,
             path: file_name,
@@ -50,8 +50,9 @@ impl<'a> FileTransformer<'a> {
     }
     /// Move the read needle forward, saving the text it skims
     pub fn reader_push(&mut self, amount: usize) {
-        self.new_txt.push(Cow::from(&self.unread_txt[..amount]));
-        self.unread_txt = &self.unread_txt[amount..];
+        let (before, after) = self.unread_txt.split_at(amount);
+        self.new_txt.push(Cow::from(before));
+        self.unread_txt = after;
     }
     /// Push new text into the file where the read head sits
     pub fn push(&mut self, new: Cow<'a, str>) {
@@ -75,6 +76,7 @@ impl<'a> FileTransformer<'a> {
 
     /// Write to disk
     pub fn commit(mut self) -> bool {
+        self.reset_reader();
         if !self.modified {
             return true;
         };
@@ -93,7 +95,6 @@ impl<'a> FileTransformer<'a> {
                 return false;
             }
         };
-        self.reset_reader();
 
         match file_w.write(self.unread_txt.as_bytes()) {
             Ok(_size) => true,
@@ -102,5 +103,15 @@ impl<'a> FileTransformer<'a> {
                 false
             }
         }
+    }
+}
+
+#[cfg(test)]
+use speculate::speculate; // Must be imported into the current scope.
+
+#[cfg(test)]
+speculate! {
+    it "does not have any test because I'm lazy c:" {
+        assert_eq!(true, true);
     }
 }
