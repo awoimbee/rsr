@@ -3,10 +3,6 @@ use regex::bytes::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-// The iterator starves the file modifiers threads
-// The array can become way too big and slow things down
-// I havent found the perfect solution
-
 pub struct FileWalker {
     file_stack: Vec<std::path::PathBuf>,
     dir_stack: Vec<std::path::PathBuf>,
@@ -38,7 +34,6 @@ impl FileWalker {
         }
     }
 
-    /// TODO: use gitignore
     fn allowed_dir(dname: &Path) -> bool {
         !dname.ends_with(".git") && !dname.ends_with("vendor") && !dname.ends_with("var/cache")
     }

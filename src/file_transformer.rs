@@ -107,7 +107,7 @@ impl<'a> FileTransformer<'a> {
 }
 
 #[cfg(test)]
-use speculate::speculate; // Must be imported into the current scope.
+use speculate::speculate;
 
 #[cfg(test)]
 speculate! {

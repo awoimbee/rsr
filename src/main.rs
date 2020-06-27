@@ -95,13 +95,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Raw sauce
     let ff = FileWalker::new(where_, glob);
-    ff.par_bridge().for_each(|f| sr_file(&f, &search_replace));
+    ff.par_bridge()
+        .for_each(|f| file_search_replace(&f, &search_replace));
 
     Ok(())
 }
 
 /// Search & Replace in one file
-fn sr_file(f: &std::path::Path, search_replace: &[SearchReplace]) {
+fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace]) {
     let mut ft = match FileTransformer::new(&f) {
         Some(ft) => ft,
         None => return,
@@ -109,7 +110,6 @@ fn sr_file(f: &std::path::Path, search_replace: &[SearchReplace]) {
 
     for sr in search_replace.iter() {
         ft.reset_reader();
-        // I don't really understand why ft.reader() doesn't work but ft.unread_txt does
         while let Some(cap) = sr.search.captures(ft.get_reader()) {
             let (start, end) = {
                 let whole_cap = cap.get(0).unwrap();
