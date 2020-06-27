@@ -1,6 +1,6 @@
 [package]
 name = "rsr"
-version = "0.5.1"
+version = "0.5.3"
 authors = ["Arthur Woimbée <arthur.woimbee@gmail.com>"]
 edition = "2018"
 

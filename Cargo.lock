@@ -206,7 +206,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rsr"
-version = "0.5.1"
+version = "0.5.3"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "os_str_bytes 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
