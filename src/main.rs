@@ -8,9 +8,10 @@ mod modifiers;
 use file_finder::FileWalker;
 use file_transformer::FileTransformer;
 use modifiers::{get_modifier, DynFnPtr};
-use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
+use rayon::iter::ParallelBridge;
 use regex::Regex;
+use std::borrow::Cow;
 use std::error::Error;
 
 struct Match {
@@ -107,27 +108,27 @@ fn sr_file(f: &std::path::Path, search_replace: &[SearchReplace]) {
         None => return,
     };
 
-    let mut is_modified = false;
     for sr in search_replace.iter() {
         ft.reset_reader();
-        while let Some(cap) = sr.search.captures(ft.reader()) {
-            let start = cap.get(0).unwrap().start();
-            let end = cap.get(0).unwrap().end();
-            let mut new_text = String::new();
+        // I don't really understand why ft.reader() doesn't work but ft.unread_txt does
+        while let Some(cap) = sr.search.captures(ft.get_reader()) {
+            let (start, end) = {
+                let whole_cap = cap.get(0).unwrap();
+                (whole_cap.start(), whole_cap.end())
+            };
+            ft.reader_push(start);
+            ft.reader_skip(end - start);
+
             for part in &sr.replace {
                 match part {
-                    ReplacePart::Str(stri) => new_text.push_str(stri),
+                    ReplacePart::Str(stri) => ft.push(Cow::from(*stri)),
                     ReplacePart::Match(m) => match m.transform {
-                        Some(t) => new_text.push_str(&t(&cap[m.id])),
-                        None => new_text.push_str(&cap[m.id]),
+                        Some(t) => ft.push(t(cap.get(m.id).unwrap().as_str())),
+                        None => ft.push(Cow::from(cap.get(m.id).unwrap().as_str())),
                     },
                 }
             }
-            ft.reader_replace(start, end, new_text);
-            is_modified = true;
         }
     }
-    if is_modified {
-        ft.write_file(&f);
-    }
+    ft.commit();
 }
