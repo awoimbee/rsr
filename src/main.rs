@@ -68,7 +68,7 @@ fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = clap_app!(rsr =>
-        (version: "0.5.1")
+        (version: "0.5.4")
         (author: "Arthur W. <arthur.woimbee@gmail.com>")
         (about: "rsr, a tool to search & replace FAST.")
         (@arg WHERE: +takes_value +required "Where to search & replace")
@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 /// Search & Replace in one file
 fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace]) {
-    let mut ft = match FileTransformer::new(&f) {
+    let mut ft = match FileTransformer::new(f) {
         Some(ft) => ft,
         None => return,
     };

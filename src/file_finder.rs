@@ -58,7 +58,7 @@ impl Iterator for FileWalker {
                 let f = f.unwrap();
                 let f_type = f.metadata().unwrap().file_type();
                 let f_path = f.path();
-                if f_type.is_file() && self.reg.is_match(&f_path.as_os_str().to_bytes()) {
+                if f_type.is_file() && self.reg.is_match(&f_path.as_os_str().to_raw_bytes()) {
                     self.file_stack.push(f_path);
                 } else if f_type.is_dir() && Self::allowed_dir(&f_path) {
                     self.dir_stack.push(f_path);

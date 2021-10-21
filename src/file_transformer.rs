@@ -39,7 +39,7 @@ impl<'a> FileTransformer<'a> {
         Some(FileTransformer {
             txt: contents,
             new_txt: Vec::with_capacity(100),
-            unread_txt: &contents_ref,
+            unread_txt: contents_ref,
             modified: false,
             path: file_name,
         })

@@ -1,6 +1,6 @@
 [package]
 name = "rsr"
-version = "0.5.3"
+version = "0.5.4"
 authors = ["Arthur Woimbée <arthur.woimbee@gmail.com>"]
 edition = "2018"
 
@@ -12,9 +12,9 @@ debug = true
 
 [dependencies]
 clap = "2.33"
-regex = "1.3"
-rayon = "1.3"
-os_str_bytes = "2.3"
+regex = "1.5"
+rayon = "1.5"
+os_str_bytes = "4.2"
 
 [dev-dependencies]
 speculate = "0.1"
