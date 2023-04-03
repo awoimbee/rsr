@@ -6,7 +6,7 @@ use file_finder::FileWalker;
 use file_transformer::FileTransformer;
 use modifiers::{get_modifier, DynFnPtr};
 
-use clap::clap_app;
+use clap::{arg, command};
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
 use regex::Regex;
@@ -27,14 +27,14 @@ struct SearchReplace<'a> {
     replace: Vec<ReplacePart<'a>>,
 }
 
-fn parse_escaped<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
+fn parse_escaped<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
     let (sear, repl) = sr;
-    let search = Regex::new(&regex::escape(sear)).unwrap();
-    let replace = vec![ReplacePart::Str(repl)];
+    let search = Regex::new(&regex::escape(sear.as_ref())).unwrap();
+    let replace = vec![ReplacePart::Str(repl.as_ref())];
     SearchReplace { search, replace }
 }
 
-fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
+fn parse<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
     let reg_match = Regex::new(r"\$\(([0-9]*)([A-Z]+)?\)").unwrap();
     let (raw_search, raw_replace) = sr;
     let search = Regex::new(raw_search).unwrap();
@@ -67,27 +67,33 @@ fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = clap_app!(rsr =>
-        (version: "0.5.4")
-        (author: "Arthur W. <arthur.woimbee@gmail.com>")
-        (about: "rsr, a tool to search & replace FAST.")
-        (@arg WHERE: +takes_value +required "Where to search & replace")
-        (@arg ESCAPE: -e --escape "Escape search string")
-        (@arg SEARCH: -s --search ... +takes_value +required "What to search (regex syntax unless --escape)")
-        (@arg REPLACE: -r --replace ... +takes_value +required "Replace by what ? (capture groups: $(N), \\n: $'\\n')")
-        (@arg GLOB: -g --glob +takes_value "Kinda a glob pattern (regex syntax)")
-    )
-    .get_matches();
+    let args = command!()
+        .arg(
+            arg!(<WHERE> "Where to search & replace")
+                .required(true)
+                .num_args(1),
+        )
+        .arg(arg!(-g --glob <GLOB> "Glob file paths (regex syntax)"))
+        .arg(arg!(-e --escape "Escape search string").action(clap::ArgAction::SetTrue))
+        .arg(
+            arg!(-s --search <SEARCH>... "What to search (regex syntax unless --escape)")
+                .required(true),
+        )
+        .arg(
+            arg!(-r --replace <REPLACE>... "Replace by what ? (capture groups: $(N), \\n: $'\\n')")
+                .required(true),
+        )
+        .get_matches();
 
     // Read input args
-    if args.occurrences_of("SEARCH") != args.occurrences_of("REPLACE") {
+    let search = args.get_many::<String>("search").unwrap();
+    let replace = args.get_many::<String>("replace").unwrap();
+    if search.len() != replace.len() {
         panic!("You must input 1 replacement string per search string !");
     }
-    let escape = args.is_present("ESCAPE");
-    let search = args.values_of("SEARCH").unwrap();
-    let replace = args.values_of("REPLACE").unwrap();
-    let where_ = args.value_of("WHERE").unwrap();
-    let glob = args.value_of("GLOB").unwrap_or(".*");
+    let escape = args.get_flag("escape");
+    let where_ = args.get_one::<String>("WHERE").unwrap();
+    let glob = *args.get_one::<&str>("glob").unwrap_or(&".*");
 
     // Parse search & replace strings
     let parser = if escape { parse_escaped } else { parse };

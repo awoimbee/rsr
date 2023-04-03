@@ -105,13 +105,3 @@ impl<'a> FileTransformer<'a> {
         }
     }
 }
-
-#[cfg(test)]
-use speculate::speculate;
-
-#[cfg(test)]
-speculate! {
-    it "does not have any test because I'm lazy c:" {
-        assert_eq!(true, true);
-    }
-}

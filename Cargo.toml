@@ -1,8 +1,9 @@
 [package]
 name = "rsr"
-version = "0.5.4"
+description = "rsr, a tool to search & replace FAST."
+version = "0.6.0"
 authors = ["Arthur Woimbée <arthur.woimbee@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,10 +12,9 @@ edition = "2018"
 debug = true
 
 [dependencies]
-clap = "2.33"
-regex = "1.5"
-rayon = "1.5"
-os_str_bytes = "4.2"
+clap = { version = "4.1", features = ["cargo"] }
+regex = "1.7"
+rayon = "1.7"
+os_str_bytes = "6.4"
 
 [dev-dependencies]
-speculate = "0.1"
