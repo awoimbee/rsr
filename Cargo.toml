@@ -16,5 +16,7 @@ clap = { version = "4.1", features = ["cargo", "derive"] }
 regex = "1.7"
 rayon = "1.7"
 os_str_bytes = "6.4"
+log = "0.4.17"
+env_logger = "0.10.0"
 
 [dev-dependencies]

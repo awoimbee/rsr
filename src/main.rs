@@ -45,10 +45,23 @@ struct Match {
     transform: Option<DynFnPtr>,
 }
 
+impl std::fmt::Debug for Match {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(id: {}, has_transform: {})",
+            self.id,
+            self.transform.is_some()
+        )
+    }
+}
+
+#[derive(Debug)]
 enum ReplacePart<'a> {
     Str(&'a str),
     Match(Match),
 }
+#[derive(Debug)]
 struct SearchReplace<'a> {
     search: Regex,
     replace: Vec<ReplacePart<'a>>,
@@ -56,8 +69,8 @@ struct SearchReplace<'a> {
 
 fn parse_escaped<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
     let (sear, repl) = sr;
-    let search = Regex::new(&regex::escape(sear.as_ref())).unwrap();
-    let replace = vec![ReplacePart::Str(repl.as_ref())];
+    let search = Regex::new(&regex::escape(sear)).unwrap();
+    let replace = vec![ReplacePart::Str(repl)];
     SearchReplace { search, replace }
 }
 
@@ -94,19 +107,24 @@ fn parse<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
     let args = Args::parse();
+
     if args.search.len() != args.replace.len() {
         panic!("You must input 1 replacement string per search string !");
     }
 
     // Parse search & replace strings
     let parser = if args.escape { parse_escaped } else { parse };
+
     let search_replace: Vec<_> = args
         .search
         .iter()
         .zip(args.replace.iter())
         .map(parser)
         .collect();
+
+    log::debug!("search_replace: {:?}", search_replace);
 
     // Raw sauce
     let ff = FileWalker::new(args.r#where, &args.glob);
