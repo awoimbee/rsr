@@ -12,7 +12,7 @@ edition = "2021"
 debug = true
 
 [dependencies]
-clap = { version = "4.1", features = ["cargo"] }
+clap = { version = "4.1", features = ["cargo", "derive"] }
 regex = "1.7"
 rayon = "1.7"
 os_str_bytes = "6.4"

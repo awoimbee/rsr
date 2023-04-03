@@ -10,22 +10,21 @@ pub struct FileWalker {
 }
 
 impl FileWalker {
-    pub fn new(root: &str, regex: &str) -> Self {
+    pub fn new(root: PathBuf, regex: &str) -> Self {
         let mut file_stack = Vec::with_capacity(50);
         let mut dir_stack = Vec::with_capacity(50);
         let reg = match Regex::new(regex) {
             Ok(r) => r,
             Err(e) => panic!("Invalid regex: {}: {}", regex, e),
         };
-        let r_path = PathBuf::from(root);
-        let root_meta = match fs::metadata(&r_path) {
+        let root_meta = match fs::metadata(&root) {
             Ok(m) => m,
-            Err(e) => panic!("Invalid root dir: {} ({})", root, e),
+            Err(e) => panic!("Invalid root dir: {} ({})", root.to_string_lossy(), e),
         };
         if root_meta.is_dir() {
-            dir_stack.push(r_path)
+            dir_stack.push(root)
         } else {
-            file_stack.push(r_path)
+            file_stack.push(root)
         };
         Self {
             file_stack,

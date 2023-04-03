@@ -12,6 +12,33 @@ use rayon::prelude::*;
 use regex::Regex;
 use std::borrow::Cow;
 use std::error::Error;
+use std::path::PathBuf;
+
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Where to search & replace
+    #[arg()]
+    r#where: PathBuf,
+
+    /// What to search (regex syntax unless --escape)
+    #[arg(short, long)]
+    search: Vec<String>,
+
+    /// Replace by what ? (capture groups: $(N), \n: $'\n')
+    #[arg(short, long)]
+    replace: Vec<String>,
+
+    ///Glob file paths (regex syntax)
+    #[arg(short, long, default_value = ".*")]
+    glob: String,
+
+    /// Escape search string
+    #[arg(short, long)]
+    escape: bool,
+}
 
 struct Match {
     id: usize,
@@ -67,40 +94,22 @@ fn parse<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = command!()
-        .arg(
-            arg!(<WHERE> "Where to search & replace")
-                .required(true)
-                .num_args(1),
-        )
-        .arg(arg!(-g --glob <GLOB> "Glob file paths (regex syntax)"))
-        .arg(arg!(-e --escape "Escape search string").action(clap::ArgAction::SetTrue))
-        .arg(
-            arg!(-s --search <SEARCH>... "What to search (regex syntax unless --escape)")
-                .required(true),
-        )
-        .arg(
-            arg!(-r --replace <REPLACE>... "Replace by what ? (capture groups: $(N), \\n: $'\\n')")
-                .required(true),
-        )
-        .get_matches();
-
-    // Read input args
-    let search = args.get_many::<String>("search").unwrap();
-    let replace = args.get_many::<String>("replace").unwrap();
-    if search.len() != replace.len() {
+    let args = Args::parse();
+    if args.search.len() != args.replace.len() {
         panic!("You must input 1 replacement string per search string !");
     }
-    let escape = args.get_flag("escape");
-    let where_ = args.get_one::<String>("WHERE").unwrap();
-    let glob = *args.get_one::<&str>("glob").unwrap_or(&".*");
 
     // Parse search & replace strings
-    let parser = if escape { parse_escaped } else { parse };
-    let search_replace: Vec<_> = search.zip(replace).map(parser).collect();
+    let parser = if args.escape { parse_escaped } else { parse };
+    let search_replace: Vec<_> = args
+        .search
+        .iter()
+        .zip(args.replace.iter())
+        .map(parser)
+        .collect();
 
     // Raw sauce
-    let ff = FileWalker::new(where_, glob);
+    let ff = FileWalker::new(args.r#where, &args.glob);
     ff.par_bridge()
         .for_each(|f| file_search_replace(&f, &search_replace));
 
