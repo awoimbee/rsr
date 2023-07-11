@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Write as FmtWrite;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::mem::transmute;
@@ -27,9 +28,7 @@ impl<'a> FileTransformer<'a> {
         match f.read_to_string(&mut contents) {
             Ok(_) => (),
             Err(e) => {
-                if e.kind() != std::io::ErrorKind::InvalidData {
-                    eprintln!("Could not read {} ({})", file_name.to_string_lossy(), e);
-                }
+                eprintln!("Could not read {} ({})", file_name.to_string_lossy(), e);
                 return None;
             }
         };
@@ -74,6 +73,19 @@ impl<'a> FileTransformer<'a> {
         self.unread_txt
     }
 
+    /// Write to stdout
+    pub fn print(mut self) {
+        self.reset_reader();
+        let mut buf = String::new();
+        writeln!(buf, "--- {} ---", self.path.to_string_lossy()).unwrap();
+        if !self.modified {
+            writeln!(buf, "(not modified)").unwrap();
+        } else {
+            writeln!(buf, "{}", self.unread_txt).unwrap();
+        }
+        println!("{}", buf);
+    }
+
     /// Write to disk
     pub fn commit(mut self) -> bool {
         self.reset_reader();
@@ -103,15 +115,5 @@ impl<'a> FileTransformer<'a> {
                 false
             }
         }
-    }
-}
-
-#[cfg(test)]
-use speculate::speculate;
-
-#[cfg(test)]
-speculate! {
-    it "does not have any test because I'm lazy c:" {
-        assert_eq!(true, true);
     }
 }

@@ -6,22 +6,66 @@ use file_finder::FileWalker;
 use file_transformer::FileTransformer;
 use modifiers::{get_modifier, DynFnPtr};
 
-use clap::clap_app;
+use clap::{arg, command};
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
 use regex::Regex;
 use std::borrow::Cow;
 use std::error::Error;
+use std::path::PathBuf;
+
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Where to search & replace
+    #[arg()]
+    r#where: PathBuf,
+
+    /// What to search (regex syntax unless --escape)
+    #[arg(short, long)]
+    search: Vec<String>,
+
+    /// Replace by what ? (capture groups: $(N), \n: $'\n')
+    #[arg(short, long)]
+    replace: Vec<String>,
+
+    ///Glob file paths (regex syntax)
+    #[arg(short, long, default_value = ".*")]
+    glob: String,
+
+    /// Escape search string
+    #[arg(short, long)]
+    escape: bool,
+
+    /// Print to stdout, do not modify files
+    #[arg(short, long)]
+    dry_run: bool,
+}
 
 struct Match {
     id: usize,
     transform: Option<DynFnPtr>,
 }
 
+impl std::fmt::Debug for Match {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(id: {}, has_transform: {})",
+            self.id,
+            self.transform.is_some()
+        )
+    }
+}
+
+#[derive(Debug)]
 enum ReplacePart<'a> {
     Str(&'a str),
     Match(Match),
 }
+#[derive(Debug)]
 struct SearchReplace<'a> {
     search: Regex,
     replace: Vec<ReplacePart<'a>>,
@@ -67,42 +111,35 @@ fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = clap_app!(rsr =>
-        (version: "0.5.4")
-        (author: "Arthur W. <arthur.woimbee@gmail.com>")
-        (about: "rsr, a tool to search & replace FAST.")
-        (@arg WHERE: +takes_value +required "Where to search & replace")
-        (@arg ESCAPE: -e --escape "Escape search string")
-        (@arg SEARCH: -s --search ... +takes_value +required "What to search (regex syntax unless --escape)")
-        (@arg REPLACE: -r --replace ... +takes_value +required "Replace by what ? (capture groups: $(N), \\n: $'\\n')")
-        (@arg GLOB: -g --glob +takes_value "Kinda a glob pattern (regex syntax)")
-    )
-    .get_matches();
+    env_logger::init();
+    let args = Args::parse();
 
-    // Read input args
-    if args.occurrences_of("SEARCH") != args.occurrences_of("REPLACE") {
+    if args.search.len() != args.replace.len() {
         panic!("You must input 1 replacement string per search string !");
     }
-    let escape = args.is_present("ESCAPE");
-    let search = args.values_of("SEARCH").unwrap();
-    let replace = args.values_of("REPLACE").unwrap();
-    let where_ = args.value_of("WHERE").unwrap();
-    let glob = args.value_of("GLOB").unwrap_or(".*");
 
     // Parse search & replace strings
-    let parser = if escape { parse_escaped } else { parse };
-    let search_replace: Vec<_> = search.zip(replace).map(parser).collect();
+    let parser = if args.escape { parse_escaped } else { parse };
+
+    let search_replace: Vec<_> = args
+        .search
+        .iter()
+        .zip(args.replace.iter())
+        .map(|(s, r)| parser((s, r)))
+        .collect();
+
+    log::debug!("search_replace: {:?}", search_replace);
 
     // Raw sauce
-    let ff = FileWalker::new(where_, glob);
+    let ff = FileWalker::new(args.r#where, &args.glob);
     ff.par_bridge()
-        .for_each(|f| file_search_replace(&f, &search_replace));
+        .for_each(|f| file_search_replace(&f, &search_replace, args.dry_run));
 
     Ok(())
 }
 
 /// Search & Replace in one file
-fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace]) {
+fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace], dry_run: bool) {
     let mut ft = match FileTransformer::new(f) {
         Some(ft) => ft,
         None => return,
@@ -129,5 +166,9 @@ fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace]) {
             }
         }
     }
-    ft.commit();
+    if dry_run {
+        ft.print();
+    } else {
+        ft.commit();
+    }
 }
