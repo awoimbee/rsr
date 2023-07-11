@@ -38,6 +38,10 @@ struct Args {
     /// Escape search string
     #[arg(short, long)]
     escape: bool,
+
+    /// Print to stdout, do not modify files
+    #[arg(short, long)]
+    dry_run: bool,
 }
 
 struct Match {
@@ -67,14 +71,14 @@ struct SearchReplace<'a> {
     replace: Vec<ReplacePart<'a>>,
 }
 
-fn parse_escaped<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
+fn parse_escaped<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
     let (sear, repl) = sr;
     let search = Regex::new(&regex::escape(sear)).unwrap();
     let replace = vec![ReplacePart::Str(repl)];
     SearchReplace { search, replace }
 }
 
-fn parse<'a>(sr: (&String, &'a String)) -> SearchReplace<'a> {
+fn parse<'a>(sr: (&str, &'a str)) -> SearchReplace<'a> {
     let reg_match = Regex::new(r"\$\(([0-9]*)([A-Z]+)?\)").unwrap();
     let (raw_search, raw_replace) = sr;
     let search = Regex::new(raw_search).unwrap();
@@ -121,7 +125,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .search
         .iter()
         .zip(args.replace.iter())
-        .map(parser)
+        .map(|(s, r)| parser((s, r)))
         .collect();
 
     log::debug!("search_replace: {:?}", search_replace);
@@ -129,13 +133,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Raw sauce
     let ff = FileWalker::new(args.r#where, &args.glob);
     ff.par_bridge()
-        .for_each(|f| file_search_replace(&f, &search_replace));
+        .for_each(|f| file_search_replace(&f, &search_replace, args.dry_run));
 
     Ok(())
 }
 
 /// Search & Replace in one file
-fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace]) {
+fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace], dry_run: bool) {
     let mut ft = match FileTransformer::new(f) {
         Some(ft) => ft,
         None => return,
@@ -162,5 +166,9 @@ fn file_search_replace(f: &std::path::Path, search_replace: &[SearchReplace]) {
             }
         }
     }
-    ft.commit();
+    if dry_run {
+        ft.print();
+    } else {
+        ft.commit();
+    }
 }
